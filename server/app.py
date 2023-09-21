@@ -1,86 +1,77 @@
-#!/usr/bin/env python3
-
-from flask import Flask, request, make_response
+# Import necessary libraries and models
+from flask import Flask, jsonify, request, make_response
 from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
-
-from models import db, User, Review, Game
+from models import db, Review
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.json.compact = False
-
-migrate = Migrate(app, db)
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = True
 
 db.init_app(app)
 
-@app.route('/')
-def index():
-    return "Index for Game/Review/User API"
+# Route to create a new review via POST request
+@app.route('/reviews', methods=['POST'])
+def create_review():
+    data = request.json  # Get JSON data from the request body
 
-@app.route('/games')
-def games():
+    # Extract relevant data for creating a new review
+    score = data.get("score")
+    comment = data.get("comment")
+    user_id = data.get("user_id")
+    game_id = data.get("game_id")
 
-    games = []
-    for game in Game.query.all():
-        game_dict = {
-            "title": game.title,
-            "genre": game.genre,
-            "platform": game.platform,
-            "price": game.price,
-        }
-        games.append(game_dict)
+    # Create a new review object
+    new_review = Review(score=score, comment=comment, user_id=user_id, game_id=game_id)
 
-    response = make_response(
-        games,
-        200
-    )
+    # Add the new review to the database
+    db.session.add(new_review)
+    db.session.commit()
 
-    return response
+    # Return the newly created review as JSON with a 201 status code (Created)
+    response_data = new_review.to_dict()
+    return jsonify(response_data), 201
 
-@app.route('/games/<int:id>')
-def game_by_id(id):
-    game = Game.query.filter(Game.id == id).first()
-    
-    game_dict = game.to_dict()
+# Route to update an existing review via PATCH request
+@app.route('/reviews/<int:id>', methods=['PATCH'])
+def update_review(id):
+    review = Review.query.get(id)  # Find the review by its ID
 
-    response = make_response(
-        game_dict,
-        200
-    )
+    if not review:
+        # Return a 404 response if the review doesn't exist
+        return jsonify({"error": "Review not found"}), 404
 
-    return response
+    data = request.json  # Get JSON data from the request body
 
-@app.route('/reviews')
-def reviews():
+    # Update the review attributes based on the data in the request
+    if "score" in data:
+        review.score = data["score"]
+    if "comment" in data:
+        review.comment = data["comment"]
 
-    reviews = []
-    for review in Review.query.all():
-        review_dict = review.to_dict()
-        reviews.append(review_dict)
+    # Commit the changes to the database
+    db.session.commit()
 
-    response = make_response(
-        reviews,
-        200
-    )
+    # Return the updated review as JSON with a 200 status code (OK)
+    response_data = review.to_dict()
+    return jsonify(response_data), 200
 
-    return response
+# Route to delete an existing review via DELETE request
+@app.route('/reviews/<int:id>', methods=['DELETE'])
+def delete_review(id):
+    review = Review.query.get(id)  # Find the review by its ID
 
-@app.route('/users')
-def users():
+    if not review:
+        # Return a 404 response if the review doesn't exist
+        return jsonify({"error": "Review not found"}), 404
 
-    users = []
-    for user in User.query.all():
-        user_dict = user.to_dict()
-        users.append(user_dict)
+    # Delete the review from the database
+    db.session.delete(review)
+    db.session.commit()
 
-    response = make_response(
-        users,
-        200
-    )
-
-    return response
+    # Return a success message as JSON with a 200 status code (OK)
+    response_data = {"message": "Review deleted successfully"}
+    return jsonify(response_data), 200
 
 if __name__ == '__main__':
-    app.run(port=5555, debug=True)
+    app.run(port=5555)
